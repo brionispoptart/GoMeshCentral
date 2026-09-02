@@ -4701,8 +4701,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/client" element={<ClientLogin />} />
-        <Route path="/client/portal/*" element={<ClientPortal />} />
+        <Route path="/" element={!session ? <ClientLogin /> : <Navigate to="/overview" />} />
+        <Route path="/login" element={<ClientLogin />} />
+        <Route path="/client" element={<Navigate to="/" />} />
+        <Route path="/client/portal/*" element={<Navigate to="/overview" />} />
         <Route path="/*" element={
           <div className="bg-atmo min-h-screen">
             {!session ? (

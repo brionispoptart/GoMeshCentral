@@ -1,0 +1,53 @@
+name: Auto-Deploy to Server
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Deploy to Linux Server
+      uses: appleboy/ssh-action@master
+      with:
+        host: 10.10.0.242
+        username: brionlund
+        key: ${{ secrets.DEPLOY_SSH_KEY }}
+        port: 22
+        script: |
+          cd ~/gomeshcentral
+          
+          # Kill existing processes
+          pkill -f server-linux || true
+          pkill -f agent-linux || true
+          sleep 2
+          
+          # Download latest binaries from GitHub releases
+          LATEST_TAG=$(curl -s https://api.github.com/repos/brionispoptart/GoMeshCentral/releases/latest | grep tag_name | head -1 | cut -d '"' -f 4)
+          
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No releases found. Skipping deployment."
+            exit 1
+          fi
+          
+          echo "Deploying version: $LATEST_TAG"
+          
+          # Download latest binaries
+          wget -O server-linux "https://github.com/brionispoptart/GoMeshCentral/releases/download/$LATEST_TAG/server-linux"
+          wget -O agent-linux "https://github.com/brionispoptart/GoMeshCentral/releases/download/$LATEST_TAG/agent-linux"
+          
+          # Make executable
+          chmod +x server-linux agent-linux
+          
+          # Start services
+          mkdir -p data
+          nohup ./server-linux > server.log 2>&1 &
+          sleep 3
+          nohup ./agent-linux -server localhost:8080 > agent.log 2>&1 &
+          
+          # Verify
+          sleep 2
+          ps aux | grep -E "server-linux|agent-linux" | grep -v grep
+          echo "✓ Deployment complete"
