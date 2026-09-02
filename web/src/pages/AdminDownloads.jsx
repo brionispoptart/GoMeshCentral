@@ -109,10 +109,15 @@ export function AdminDownloads() {
   const downloadAgent = async () => {
     try {
       setLoading(true);
-      const url = apiUrl(`/api/download/agent-${selectedPlatform}.exe`);
+      const endpointPath = selectedPlatform === "windows" 
+        ? "/api/download/agent/windows-amd64"
+        : "/api/download/agent/linux-amd64";
+      const url = apiUrl(endpointPath);
+      const filename = selectedPlatform === "windows" ? "agent.exe" : "gomesh-agent";
+      
       const a = document.createElement("a");
       a.href = url;
-      a.download = `agent-${selectedPlatform}.exe`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
