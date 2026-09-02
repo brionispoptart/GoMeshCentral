@@ -60,7 +60,7 @@ export function AdminDownloads() {
       const serverAddr = window.location.hostname === "localhost" ? "localhost:8080" : window.location.host;
 
       if (platform === "windows") {
-        const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri 'http://${serverAddr}/api/download/install.ps1' -OutFile 'install.ps1'; & .\\install.ps1 -Server '${serverAddr}' -EnrollToken '${enrollmentToken}' }"`;
+        const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'http://${serverAddr}/api/download/install.ps1' -OutFile 'install.ps1' -UseBasicParsing; & .\\install.ps1 -Server '${serverAddr}' -EnrollToken '${enrollmentToken}'"`;
         setCommand(cmd);
       } else {
         const cmd = `curl -sSL http://${serverAddr}/api/download/install.sh | sudo bash -s -- -server ${serverAddr} -enroll-token ${enrollmentToken}`;
