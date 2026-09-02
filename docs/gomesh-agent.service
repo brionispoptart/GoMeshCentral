@@ -1,0 +1,18 @@
+[Unit]
+Description=GoMeshCentral Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/gomeshcentral/gomesh-agent -server SERVER_IP:8080 -state /var/lib/gomeshcentral/agent-state.json -name linux-vm-01 -enroll-token ENROLLMENT_TOKEN
+Restart=always
+RestartSec=5
+
+# Keep credentials and state private to root.
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
