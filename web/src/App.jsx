@@ -4,6 +4,7 @@ import { ClientLogin } from "./pages/ClientLogin";
 import { ClientPortal } from "./pages/ClientPortal";
 import { PendingApprovals } from "./pages/PendingApprovals";
 import AdminCustomFields from "./pages/AdminCustomFields";
+import { AdminDownloads } from "./pages/AdminDownloads";
 import {
   CheckCircle2,
   Clock3,
@@ -75,6 +76,7 @@ const FEATURE_SECTIONS = [
 const ADMIN_ITEMS = [
   { path: "/users", label: "Users & Roles", status: "implemented", description: "Account and role management." },
   { path: "/enrollment", label: "Enrollment", status: "implemented", description: "Agent enrollment token lifecycle." },
+  { path: "/downloads", label: "Agent Downloads", status: "implemented", description: "Download agent binaries for Windows and Linux." },
   { path: "/events", label: "Audit Log", status: "implemented", description: "Timeline of server, user, and endpoint events." },
   { path: "/work-queue", label: "Work Queue", status: "implemented", description: "Live execution tracker from repository planning docs." },
   { path: "/device-groups", label: "Device Groups", status: "implemented", description: "Organize endpoints by site, role, or environment." },
@@ -3689,8 +3691,12 @@ function AppShell({
               path="/custom-fields"
               element={<AdminCustomFields token={token} />}
             />
+            <Route
+              path="/downloads"
+              element={<AdminDownloads token={token} />}
+            />
             {allFeatures
-              .filter((f) => !["/overview", "/work-queue", "/devices", "/terminal", "/events", "/reports", "/users", "/enrollment", "/settings", "/branding", "/custom-fields", "/clients", "/contracts", "/tickets", "/billing", "/device-groups", "/assistant", "/scripts", "/alerts", "/files", "/approvals"].includes(f.path))
+              .filter((f) => !["/overview", "/work-queue", "/devices", "/terminal", "/events", "/reports", "/users", "/enrollment", "/settings", "/branding", "/custom-fields", "/downloads", "/clients", "/contracts", "/tickets", "/billing", "/device-groups", "/assistant", "/scripts", "/alerts", "/files", "/approvals"].includes(f.path))
               .map((feature) => (
                 <Route
                   key={feature.path}
