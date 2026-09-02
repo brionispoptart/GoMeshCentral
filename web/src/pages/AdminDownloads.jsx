@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Check, Plus, Loader2, AlertCircle, Zap, Server } from "lucide-react";
+import { Copy, Check, Plus, Loader2, AlertCircle, Zap, Server, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -77,9 +77,51 @@ export function AdminDownloads() {
   };
 
   const copyToClipboard = (text, id) => {
-    navigator.clipboard.writeText(text);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(id);
+        setTimeout(() => setCopied(null), 2000);
+      }).catch(() => {
+        fallbackCopyToClipboard(text, id);
+      });
+    } else {
+      fallbackCopyToClipboard(text, id);
+    }
+  };
+
+  const fallbackCopyToClipboard = (text, id) => {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand("copy");
+      setCopied(id);
+      setTimeout(() => setCopied(null), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+    }
+    document.body.removeChild(textarea);
+  };
+
+  const downloadAgent = async () => {
+    try {
+      setLoading(true);
+      const url = apiUrl(`/api/download/agent-${selectedPlatform}.exe`);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `agent-${selectedPlatform}.exe`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Download error:", err);
+      setError("Failed to download agent binary");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!selectedPlatform) {
@@ -215,37 +257,85 @@ export function AdminDownloads() {
 
       <Card className="border-2 border-gray-200">
         <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 pb-4">
-          <CardTitle className="text-2xl">Installation Command</CardTitle>
+          <CardTitle className="text-2xl">
+            {selectedPlatform === "windows" ? "Installation Options" : "Installation Command"}
+          </CardTitle>
           <CardDescription className="text-base">
-            This command downloads and installs the agent with automatic enrollment
+            {selectedPlatform === "windows" 
+              ? "Choose your preferred installation method" 
+              : "This command downloads and installs the agent with automatic enrollment"}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-8 space-y-6">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              {selectedPlatform === "windows" ? "PowerShell (Run as Administrator)" : "Terminal / Bash"}
-            </p>
-            <div className="flex gap-2 items-start">
-              <div className="flex-1 bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
-                {command}
+          {selectedPlatform === "windows" && (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Option 1: Direct Binary Download
+              </p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Download the agent executable directly and run it on your system. The enrollment token will authenticate with the server automatically.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  size="lg"
+                  onClick={downloadAgent}
+                  disabled={loading}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-6 text-base font-semibold"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5 mr-2" />
+                      Download agent.exe
+                    </>
+                  )}
+                </Button>
+                <input
+                  type="hidden"
+                  id="enrollToken"
+                  value={token}
+                />
               </div>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => copyToClipboard(command, "command")}
-                title="Copy command"
-                className="flex-shrink-0 mt-1 h-12 w-12 p-0"
-              >
-                {copied === "command" ? (
-                  <Check className="w-5 h-5 text-green-600" />
-                ) : (
-                  <Copy className="w-5 h-5" />
-                )}
-              </Button>
+              <p className="text-xs text-muted-foreground mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+                <strong>Enrollment Token:</strong> {token}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                After downloading, run: <code className="bg-gray-100 px-2 py-1 rounded">agent.exe -server {window.location.host} -enroll-token {token}</code>
+              </p>
             </div>
-            {copied === "command" && (
-              <p className="text-sm text-green-600 font-medium">✓ Command copied to clipboard</p>
-            )}
+          )}
+
+          <div className={selectedPlatform === "windows" ? "pt-6 border-t" : ""}>
+            <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              {selectedPlatform === "windows" ? "Option 2: PowerShell Command" : "Terminal / Bash"}
+            </p>
+            <div className="space-y-3">
+              <div className="flex gap-2 items-start">
+                <div className="flex-1 bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
+                  {command}
+                </div>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => copyToClipboard(command, "command")}
+                  title="Copy command"
+                  className="flex-shrink-0 mt-1 h-12 w-12 p-0"
+                >
+                  {copied === "command" ? (
+                    <Check className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <Copy className="w-5 h-5" />
+                  )}
+                </Button>
+              </div>
+              {copied === "command" && (
+                <p className="text-sm text-green-600 font-medium">✓ Command copied to clipboard</p>
+              )}
+            </div>
           </div>
 
           {token && (
@@ -288,12 +378,16 @@ export function AdminDownloads() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <p className="text-gray-700">
-            After running this command on your {selectedPlatform === "windows" ? "Windows" : "Linux"} system:
+            After {selectedPlatform === "windows" 
+              ? "running either installation method" 
+              : "running this command"} on your {selectedPlatform === "windows" ? "Windows" : "Linux"} system:
           </p>
           <ol className="space-y-3 ml-2">
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">1</span>
-              <span>The installer script downloads the agent binary</span>
+              <span>{selectedPlatform === "windows" 
+                ? "The agent binary starts and connects to the server" 
+                : "The installer script downloads the agent binary"}</span>
             </li>
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">2</span>
@@ -301,7 +395,7 @@ export function AdminDownloads() {
             </li>
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">3</span>
-              <span>The agent starts and connects to GoMeshCentral</span>
+              <span>The agent connects to GoMeshCentral and begins system monitoring</span>
             </li>
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">4</span>
