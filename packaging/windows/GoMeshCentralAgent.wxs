@@ -33,16 +33,6 @@
     <Feature Id="MainFeature" Title="GoMeshCentral Agent" Level="1" Description="Remote management agent service">
       <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="3E4D6C2A-9D8E-4A1B-8C2F-5D9E7F1A3B5C">
         <File Id="AgentExe" Source="$(var.SourceDir)\agent.exe" KeyPath="yes" Checksum="yes" />
-        <ServiceInstall
-          Id="AgentServiceInstall"
-          Type="ownProcess"
-          Name="GoMeshCentralAgent"
-          DisplayName="GoMeshCentral Agent"
-          Description="GoMeshCentral remote management agent (persistent background service)."
-          Start="demand"
-          Account="LocalSystem"
-          ErrorControl="normal"
-          Arguments="-state C:\ProgramData\GoMeshCentral\agent-state.json" />
       </Component>
 
       <!-- App data directory -->
