@@ -53,9 +53,9 @@ try {
         TimeoutSec = 30
     }
     Invoke-WebRequest @manifestRequest
-    Write-Host "[GoMeshCentral] ✓ Manifest downloaded successfully"
+    Write-Host "[GoMeshCentral] [OK] Manifest downloaded successfully"
 } catch {
-    Write-Host "[GoMeshCentral] ⚠ Manifest download failed (optional): $($_.Exception.Message)"
+    Write-Host "[GoMeshCentral] [WARN] Manifest download failed (optional): $($_.Exception.Message)"
     Write-Host "[GoMeshCentral]   Agent will use default settings"
 }
 $ProgressPreference = 'Continue'
@@ -77,10 +77,10 @@ try {
     
     # Verify binary exists and has reasonable size
     $fileInfo = Get-Item $TempBinaryPath
-    if ($fileInfo.Length -lt 1000000) {  # Less than 1MB is suspicious
+    if ($fileInfo.Length -lt 1000000) {
         throw "Downloaded file is too small ($($fileInfo.Length) bytes)"
     }
-    Write-Host "[GoMeshCentral] ✓ Agent binary downloaded ($([math]::Round($fileInfo.Length / 1MB, 2)) MB)"
+    Write-Host "[GoMeshCentral] [OK] Agent binary downloaded ($([math]::Round($fileInfo.Length / 1MB, 2)) MB)"
 } catch {
     Write-Error "[GoMeshCentral] Failed to download agent binary: $($_.Exception.Message)"
     exit 1
@@ -93,12 +93,12 @@ Write-Host "[GoMeshCentral] Step 3: Preparing installation directories..."
 try {
     if (-not (Test-Path $InstallDir)) {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-        Write-Host "[GoMeshCentral] ✓ Created $InstallDir"
+        Write-Host "[GoMeshCentral] [OK] Created $InstallDir"
     }
     
     if (-not (Test-Path $DataDir)) {
         New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
-        Write-Host "[GoMeshCentral] ✓ Created $DataDir"
+        Write-Host "[GoMeshCentral] [OK] Created $DataDir"
     }
 } catch {
     Write-Error "[GoMeshCentral] Failed to create directories: $_"
@@ -120,7 +120,7 @@ if ($service) {
 Write-Host "[GoMeshCentral] Step 5: Installing agent binary..."
 try {
     Copy-Item -Path $TempBinaryPath -Destination $AgentExePath -Force
-    Write-Host "[GoMeshCentral] ✓ Agent binary installed to $AgentExePath"
+    Write-Host "[GoMeshCentral] [OK] Agent binary installed to $AgentExePath"
 } catch {
     Write-Error "[GoMeshCentral] Failed to copy agent binary: $_"
     exit 1
@@ -131,7 +131,7 @@ Write-Host "[GoMeshCentral] Step 6: Installing deployment manifest..."
 if (Test-Path "$TempDir\manifest-temp.json") {
     try {
         Copy-Item -Path "$TempDir\manifest-temp.json" -Destination $ManifestPath -Force
-        Write-Host "[GoMeshCentral] ✓ Manifest installed to $ManifestPath"
+        Write-Host "[GoMeshCentral] [OK] Manifest installed to $ManifestPath"
     } catch {
         Write-Warning "[GoMeshCentral] Failed to install manifest: $_"
     }
@@ -142,7 +142,7 @@ if (Test-Path "$TempDir\manifest-temp.json") {
 Write-Host "[GoMeshCentral] Step 7: Registering Windows service..."
 if ($service) {
     # Service exists, just ensure it's configured correctly
-    Write-Host "[GoMeshCentral] ✓ Service already registered"
+    Write-Host "[GoMeshCentral] [OK] Service already registered"
 } else {
     try {
         # Build service binary path with state file argument
@@ -156,7 +156,7 @@ if ($service) {
                    -Account "LocalSystem" `
                    -ErrorAction Stop | Out-Null
         
-        Write-Host "[GoMeshCentral] ✓ Service registered successfully"
+        Write-Host "[GoMeshCentral] [OK] Service registered successfully"
     } catch {
         Write-Error "[GoMeshCentral] Failed to register service: $_"
         exit 1
@@ -170,9 +170,9 @@ try {
     Start-Sleep -Seconds 2
     $svc = Get-Service -Name $ServiceName
     if ($svc.Status -eq 'Running') {
-        Write-Host "[GoMeshCentral] ✓ Service started successfully"
+        Write-Host "[GoMeshCentral] [OK] Service started successfully"
     } else {
-        Write-Warning "[GoMeshCentral] ⚠ Service status is $($svc.Status)"
+        Write-Warning "[GoMeshCentral] [WARN] Service status is $($svc.Status)"
     }
 } catch {
     Write-Warning "[GoMeshCentral] Failed to start service immediately: $_"
