@@ -138,6 +138,18 @@ type agentEnrollResponse struct {
 	AgentKey string `json:"agentKey"`
 }
 
+type agentRegisterRequest struct {
+	Name          string `json:"name"`
+	MachineIDHash string `json:"machineIdHash"`
+	SystemIDHash  string `json:"systemIdHash"`
+	BoardIDHash   string `json:"boardIdHash"`
+}
+
+type agentRegisterResponse struct {
+	DeviceID string `json:"deviceId"`
+	AgentKey string `json:"agentKey"`
+}
+
 type rotateAgentCredentialRequest struct {
 	DeviceID   string `json:"deviceId"`
 	CurrentKey string `json:"currentAgentKey"`
@@ -272,7 +284,11 @@ func NewServer(cfg config.Config, store storage.Store) *Server {
 	mux.HandleFunc("/api/download/install.sh", s.handleDownloadInstallSh)
 	mux.HandleFunc("/api/download/install.ps1", s.handleDownloadInstallPs1)
 	mux.HandleFunc("/api/download/agent/windows-amd64", s.handleDownloadAgentWindows)
+	mux.HandleFunc("/api/download/agent/windows-msi", s.handleDownloadAgentWindowsMSI)
 	mux.HandleFunc("/api/download/agent/linux-amd64", s.handleDownloadAgentLinux)
+	mux.HandleFunc("/api/download/agent/manifest", s.authMiddleware(s.permissionMiddleware(authz.PermManageUsers, s.handleAgentManifest)))
+	mux.HandleFunc("/api/download/agent/manifest-installer", s.authMiddleware(s.handleDownloadAgentManifestForInstaller))
+	mux.HandleFunc("/api/agents/register", s.handleAgentRegister)
 	mux.HandleFunc("/api/agents/enroll", s.handleAgentEnroll)
 	mux.HandleFunc("/api/agents/rotate-key", s.handleRotateAgentCredential)
 	mux.HandleFunc("/api/agents/admin-rotate-key", s.authMiddleware(s.permissionMiddleware(authz.PermManageUsers, s.handleAdminRotateAgentCredential)))
@@ -946,6 +962,18 @@ func (s *Server) handleDownloadAgentWindows(w http.ResponseWriter, r *http.Reque
 	http.Error(w, "Windows agent binary unavailable on server.", http.StatusNotFound)
 }
 
+func (s *Server) handleDownloadAgentWindowsMSI(w http.ResponseWriter, r *http.Request) {
+	// Serve MSI from dist directory (built by make build-windows or build-msi)
+	path := "dist/GoMeshCentralAgent.msi"
+	if _, err := os.Stat(path); err != nil {
+		http.Error(w, "Windows MSI installer not found. Ensure MSI was built via 'make build-windows' or 'make build-msi'.", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="GoMeshCentralAgent.msi"`)
+	http.ServeFile(w, r, path)
+}
+
 func (s *Server) handleDownloadAgentLinux(w http.ResponseWriter, r *http.Request) {
 	candidates := []string{"dist/gomesh-agent-linux", "data/gomesh-agent-linux", "gomesh-agent-linux"}
 	for _, path := range candidates {
@@ -982,6 +1010,39 @@ func (s *Server) handleWorkQueue(w http.ResponseWriter, r *http.Request) {
 
 	parsed := parseWorkQueueMarkdown(string(data))
 	respondJSON(w, parsed)
+}
+
+func (s *Server) handleAgentRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req agentRegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	device, err := s.store.ResolveDeviceIdentity(req.MachineIDHash, req.SystemIDHash, req.BoardIDHash, req.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	agentKey, err := randomAgentKey()
+	if err != nil {
+		http.Error(w, "failed to issue agent key", http.StatusInternalServerError)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(agentKey), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "failed to secure agent key", http.StatusInternalServerError)
+		return
+	}
+	if err := s.store.UpsertAgentCredential(device.ID, string(hash)); err != nil {
+		http.Error(w, "failed to persist agent credential", http.StatusInternalServerError)
+		return
+	}
+	s.appendAuditEvent(storage.AuditEvent{Action: "agent_auto_registered", Actor: "agent:" + device.ID, Target: device.ID, Details: "hardware_identity=2-of-3"})
+	respondJSON(w, agentRegisterResponse{DeviceID: device.ID, AgentKey: agentKey})
 }
 
 func (s *Server) handleAgentEnroll(w http.ResponseWriter, r *http.Request) {

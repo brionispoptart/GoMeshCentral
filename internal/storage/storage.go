@@ -52,6 +52,9 @@ type Device struct {
 	GroupID       string            `json:"groupId,omitempty"`
 	OrgID         string            `json:"orgId"`
 	CustomFields  map[string]string `json:"customFields,omitempty"`
+	MachineIDHash string            `json:"-"`
+	SystemIDHash  string            `json:"-"`
+	BoardIDHash   string            `json:"-"`
 }
 
 type DeviceGroup struct {
@@ -264,6 +267,7 @@ type Store interface {
 	HasAgentCredential(deviceID string) bool
 	UpsertDevice(device Device)
 	GetDevice(deviceID string) (Device, bool)
+	ResolveDeviceIdentity(machineIDHash, systemIDHash, boardIDHash, name string) (Device, error)
 	SetDeviceConnection(deviceID string, connected bool)
 	ResetDeviceConnections() error
 	ListDevices(orgID string) []Device
@@ -496,6 +500,59 @@ func (s *MemoryStore) UpsertDevice(device Device) {
 		}
 	}
 	s.devices[device.ID] = device
+}
+
+func (s *MemoryStore) ResolveDeviceIdentity(machineIDHash, systemIDHash, boardIDHash, name string) (Device, error) {
+	if countMemoryNonEmpty(machineIDHash, systemIDHash, boardIDHash) < 2 {
+		return Device{}, errors.New("at least two hardware identifiers are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var match Device
+	bestScore := 0
+	for _, candidate := range s.devices {
+		score := countMemoryMatches(candidate, machineIDHash, systemIDHash, boardIDHash)
+		if score > bestScore {
+			match, bestScore = candidate, score
+		}
+	}
+	if bestScore < 2 {
+		id, err := randomMemoryToken()
+		if err != nil {
+			return Device{}, err
+		}
+		match = Device{ID: "agent-" + id, OrgID: DefaultOrgID}
+	}
+	if name != "" {
+		match.Name = name
+	}
+	match.MachineIDHash, match.SystemIDHash, match.BoardIDHash = machineIDHash, systemIDHash, boardIDHash
+	s.devices[match.ID] = match
+	return match, nil
+}
+
+func countMemoryNonEmpty(values ...string) int {
+	count := 0
+	for _, value := range values {
+		if value != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func countMemoryMatches(device Device, machineIDHash, systemIDHash, boardIDHash string) int {
+	score := 0
+	if device.MachineIDHash != "" && device.MachineIDHash == machineIDHash {
+		score++
+	}
+	if device.SystemIDHash != "" && device.SystemIDHash == systemIDHash {
+		score++
+	}
+	if device.BoardIDHash != "" && device.BoardIDHash == boardIDHash {
+		score++
+	}
+	return score
 }
 
 func (s *MemoryStore) SetDeviceConnection(deviceID string, connected bool) {

@@ -1,45 +1,71 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="GoMeshCentral Agent" Language="1033" Version="1.0.0.0" Manufacturer="GoMeshCentral" UpgradeCode="7F4F725E-C246-4F18-9124-7B03010FA22C">
-    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="GoMeshCentral Remote Management Agent" />
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi" xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+  <Product Id="*" Name="GoMeshCentral Agent" Language="1033" Version="1.0.1.0" Manufacturer="GoMeshCentral" UpgradeCode="7F4F725E-C246-4F18-9124-7B03010FA22C">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" 
+             Description="GoMeshCentral Remote Management Agent" 
+             Manufacturer="GoMeshCentral"
+             Keywords="remote management agent deployment"/>
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of GoMeshCentral Agent is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Property Id="SERVER" Value="localhost:8080" />
-    <Property Id="ENROLL_TOKEN" Value="" />
+    <!-- Custom properties for deployment -->
+    <Property Id="SERVER" />
+    <Property Id="ENROLL_TOKEN" Admin="yes" Secure="yes" Hidden="yes" />
     <Property Id="HEARTBEAT_SEC" Value="10" />
     <Property Id="REPORT_SEC" Value="60" />
+    <Property Id="ARPCONTACT">GoMeshCentral</Property>
+    <Property Id="ARPURL">https://gomeshcentral.servr.tech</Property>
+    <Property Id="ARPHELPLINK">https://gomeshcentral.servr.tech</Property>
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
         <Directory Id="INSTALLFOLDER" Name="GoMeshCentral">
-          <Component Id="AgentBinary" Guid="3E4D6C2A-9D8E-4A1B-8C2F-5D9E7F1A3B5C">
-            <File Id="AgentExe" Source="$(var.SourceDir)\agent.exe" KeyPath="yes" />
-            <ServiceInstall
-              Id="AgentServiceInstall"
-              Type="ownProcess"
-              Name="GoMeshCentralAgent"
-              DisplayName="GoMeshCentral Agent"
-              Description="GoMeshCentral remote management agent (persistent background service)."
-              Start="auto"
-              Account="LocalSystem"
-              ErrorControl="normal"
-              Arguments="-server [SERVER] -state C:\ProgramData\GoMeshCentral\agent-state.json -heartbeat-seconds [HEARTBEAT_SEC] -report-seconds [REPORT_SEC] -enroll-token [ENROLL_TOKEN]" />
-            <ServiceControl
-              Id="AgentServiceControl"
-              Name="GoMeshCentralAgent"
-              Start="install"
-              Stop="both"
-              Remove="uninstall"
-              Wait="yes" />
-          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramDataFolder">
+        <Directory Id="PROGRAMDATAMGC" Name="GoMeshCentral">
         </Directory>
       </Directory>
     </Directory>
 
-    <Feature Id="MainFeature" Title="GoMeshCentral Agent" Level="1">
-      <ComponentRef Id="AgentBinary" />
+    <!-- Agent service component -->
+    <Feature Id="MainFeature" Title="GoMeshCentral Agent" Level="1" Description="Remote management agent service">
+      <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="3E4D6C2A-9D8E-4A1B-8C2F-5D9E7F1A3B5C">
+        <File Id="AgentExe" Source="$(var.SourceDir)\agent.exe" KeyPath="yes" Checksum="yes" />
+        <ServiceInstall
+          Id="AgentServiceInstall"
+          Type="ownProcess"
+          Name="GoMeshCentralAgent"
+          DisplayName="GoMeshCentral Agent"
+          Description="GoMeshCentral remote management agent (persistent background service)."
+          Start="demand"
+          Account="LocalSystem"
+          ErrorControl="normal"
+          Arguments="-state C:\ProgramData\GoMeshCentral\agent-state.json" />
+      </Component>
+
+      <!-- App data directory -->
+      <Component Id="AppDataDir" Directory="PROGRAMDATAMGC" Guid="8E7A2B5C-9F1D-4A3E-B7C9-1A2D3E4F5A6B">
+        <CreateFolder />
+      </Component>
+
+      <!-- Uninstall shortcut in Start Menu -->
+      <Component Id="UninstallShortcut" Directory="INSTALLFOLDER" Guid="5C4D3E2F-1A9B-8C7D-6E5F-4A3B2C1D0E9F">
+        <File Id="UninstallBat" Source="$(var.SourceDir)\uninstall.bat" Checksum="yes" />
+      </Component>
+
+      <!-- Add/Remove Programs registry entries -->
+      <Component Id="RegistryComponent" Directory="TARGETDIR" Guid="9A8B7C6D-5E4F-3A2B-1C0D-9E8F7A6B5C4D">
+        <RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\GoMeshCentralAgent">
+          <RegistryValue Type="string" Name="DisplayName" Value="GoMeshCentral Agent" />
+          <RegistryValue Type="string" Name="DisplayVersion" Value="1.0.1.0" />
+          <RegistryValue Type="string" Name="Manufacturer" Value="GoMeshCentral" />
+          <RegistryValue Type="string" Name="InstallLocation" Value="[INSTALLFOLDER]" />
+          <RegistryValue Type="string" Name="UninstallString" Value="&quot;[INSTALLFOLDER]uninstall.bat&quot;" />
+        </RegistryKey>
+      </Component>
     </Feature>
+
   </Product>
 </Wix>

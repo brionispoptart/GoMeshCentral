@@ -57,6 +57,8 @@ func runAgentUI(iconBytes []byte, statusText <-chan string, requestStop func(), 
 		}
 
 		quitItem := systray.AddMenuItem("Shutdown Agent", "Stop GoMeshCentral agent")
+		systray.AddSeparator()
+		uninstallItem := systray.AddMenuItem("Uninstall Agent", "Remove GoMeshCentral agent and service (requires admin)")
 
 		go func() {
 			for s := range statusText {
@@ -68,6 +70,17 @@ func runAgentUI(iconBytes []byte, statusText <-chan string, requestStop func(), 
 			<-quitItem.ClickedCh
 			requestStop()
 			systray.Quit()
+		}()
+
+		go func() {
+			<-uninstallItem.ClickedCh
+			// Spawn elevated uninstall process
+			if err := spawnUninstallAgent(); err != nil {
+				statusItem.SetTitle("Status: uninstall failed")
+			} else {
+				requestStop()
+				systray.Quit()
+			}
 		}()
 	}, func() {
 		requestStop()

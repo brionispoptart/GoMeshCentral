@@ -109,21 +109,53 @@ export function AdminDownloads() {
   const downloadAgent = async () => {
     try {
       setLoading(true);
-      const endpointPath = selectedPlatform === "windows" 
-        ? "/api/download/agent/windows-amd64"
-        : "/api/download/agent/linux-amd64";
-      const url = apiUrl(endpointPath);
-      const filename = selectedPlatform === "windows" ? "agent.exe" : "gomesh-agent";
+      setError(null);
       
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      let filename, url;
+      
+      if (selectedPlatform === "windows") {
+        // Download MSI installer
+        url = apiUrl("/api/download/agent/windows-msi");
+        filename = "GoMeshCentralAgent.msi";
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.statusText}`);
+        }
+        
+        // Download the file
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+      } else {
+        // Linux - just download directly
+        url = apiUrl("/api/download/agent/linux-amd64");
+        filename = "gomesh-agent";
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+      }
     } catch (err) {
       console.error("Download error:", err);
-      setError("Failed to download agent binary");
+      setError(err.message || "Failed to download agent binary");
     } finally {
       setLoading(false);
     }
@@ -275,10 +307,10 @@ export function AdminDownloads() {
           {selectedPlatform === "windows" && (
             <div className="space-y-3">
               <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Option 1: Direct Binary Download
+                Option 1: MSI Installer (Recommended)
               </p>
               <p className="text-sm text-muted-foreground mb-4">
-                Download the agent executable directly and run it on your system. The enrollment token will authenticate with the server automatically.
+                Download the MSI installer for professional deployment. It handles installation, service setup, and automatic enrollment all in one package.
               </p>
               <div className="flex gap-3">
                 <Button
@@ -295,7 +327,7 @@ export function AdminDownloads() {
                   ) : (
                     <>
                       <Download className="w-5 h-5 mr-2" />
-                      Download agent.exe
+                      Download GoMeshCentralAgent.msi
                     </>
                   )}
                 </Button>
@@ -309,7 +341,7 @@ export function AdminDownloads() {
                 <strong>Enrollment Token:</strong> {token}
               </p>
               <p className="text-xs text-muted-foreground">
-                After downloading, run: <code className="bg-gray-100 px-2 py-1 rounded">agent.exe -server {window.location.host} -enroll-token {token}</code>
+                After downloading, double-click <code className="bg-gray-100 px-2 py-1 rounded">GoMeshCentralAgent.msi</code> to install and automatically enroll the agent.
               </p>
             </div>
           )}

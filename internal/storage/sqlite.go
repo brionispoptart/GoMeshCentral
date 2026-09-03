@@ -226,6 +226,11 @@ CREATE TABLE IF NOT EXISTS invoices (
 	if err := s.addColumnIfMissing("devices", "group_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return fmt.Errorf("migrate devices group_id: %w", err)
 	}
+	for _, column := range []string{"machine_id_hash", "system_id_hash", "board_id_hash"} {
+		if err := s.addColumnIfMissing("devices", column, "TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("migrate devices %s: %w", column, err)
+		}
+	}
 	deviceGroupDDL := `
 CREATE TABLE IF NOT EXISTS device_groups (
 	id TEXT PRIMARY KEY,
@@ -695,11 +700,11 @@ func (s *SQLiteStore) UpsertDevice(device Device) {
 }
 
 func (s *SQLiteStore) GetDevice(deviceID string) (Device, bool) {
-	row := s.db.QueryRow(`SELECT id, name, last_heartbeat, connected, client_id, group_id, org_id FROM devices WHERE id = ?`, deviceID)
+	row := s.db.QueryRow(`SELECT id, name, last_heartbeat, connected, client_id, group_id, org_id, machine_id_hash, system_id_hash, board_id_hash FROM devices WHERE id = ?`, deviceID)
 	var d Device
 	var lastHeartbeat string
 	var connected int
-	if err := row.Scan(&d.ID, &d.Name, &lastHeartbeat, &connected, &d.ClientID, &d.GroupID, &d.OrgID); err != nil {
+	if err := row.Scan(&d.ID, &d.Name, &lastHeartbeat, &connected, &d.ClientID, &d.GroupID, &d.OrgID, &d.MachineIDHash, &d.SystemIDHash, &d.BoardIDHash); err != nil {
 		return Device{}, false
 	}
 	if lastHeartbeat != "" {
@@ -708,6 +713,79 @@ func (s *SQLiteStore) GetDevice(deviceID string) (Device, bool) {
 	d.Connected = connected == 1
 	d.CustomFields = s.GetDeviceCustomFields(deviceID)
 	return d, true
+}
+
+func (s *SQLiteStore) ResolveDeviceIdentity(machineIDHash, systemIDHash, boardIDHash, name string) (Device, error) {
+	if countNonEmpty(machineIDHash, systemIDHash, boardIDHash) < 2 {
+		return Device{}, errors.New("at least two hardware identifiers are required")
+	}
+	rows, err := s.db.Query(`SELECT id, name, machine_id_hash, system_id_hash, board_id_hash FROM devices WHERE machine_id_hash = ? OR system_id_hash = ? OR board_id_hash = ?`, machineIDHash, systemIDHash, boardIDHash)
+	if err != nil {
+		return Device{}, err
+	}
+	defer rows.Close()
+
+	var match Device
+	bestScore := 0
+	ambiguous := false
+	for rows.Next() {
+		var candidate Device
+		if err := rows.Scan(&candidate.ID, &candidate.Name, &candidate.MachineIDHash, &candidate.SystemIDHash, &candidate.BoardIDHash); err != nil {
+			return Device{}, err
+		}
+		score := countMatches(candidate.MachineIDHash, machineIDHash, candidate.SystemIDHash, systemIDHash, candidate.BoardIDHash, boardIDHash)
+		if score > bestScore {
+			match, bestScore, ambiguous = candidate, score, false
+		} else if score == bestScore && score >= 2 {
+			ambiguous = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return Device{}, err
+	}
+	if ambiguous {
+		return Device{}, errors.New("hardware identity matches multiple devices")
+	}
+	if bestScore < 2 {
+		id, err := randomToken()
+		if err != nil {
+			return Device{}, err
+		}
+		match = Device{ID: "agent-" + id, OrgID: DefaultOrgID}
+	}
+	if name != "" {
+		match.Name = name
+	}
+	match.MachineIDHash, match.SystemIDHash, match.BoardIDHash = machineIDHash, systemIDHash, boardIDHash
+	_, err = s.db.Exec(`INSERT INTO devices(id, name, last_heartbeat, connected, org_id, machine_id_hash, system_id_hash, board_id_hash)
+		VALUES(?, ?, '', 0, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET name = CASE WHEN excluded.name = '' THEN devices.name ELSE excluded.name END, machine_id_hash = excluded.machine_id_hash, system_id_hash = excluded.system_id_hash, board_id_hash = excluded.board_id_hash`, match.ID, match.Name, match.OrgID, match.MachineIDHash, match.SystemIDHash, match.BoardIDHash)
+	if err != nil {
+		return Device{}, err
+	}
+	return s.deviceByID(match.ID)
+}
+
+func (s *SQLiteStore) deviceByID(deviceID string) (Device, error) {
+	d, ok := s.GetDevice(deviceID)
+	if !ok {
+		return Device{}, errors.New("resolved device was not found")
+	}
+	return d, nil
+}
+
+func countNonEmpty(values ...string) int {
+	count := 0
+	for _, value := range values {
+		if value != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func countMatches(leftMachine, rightMachine, leftSystem, rightSystem, leftBoard, rightBoard string) int {
+	return boolToInt(leftMachine != "" && leftMachine == rightMachine) + boolToInt(leftSystem != "" && leftSystem == rightSystem) + boolToInt(leftBoard != "" && leftBoard == rightBoard)
 }
 
 func (s *SQLiteStore) AssignDeviceClient(deviceID, clientID string) error {

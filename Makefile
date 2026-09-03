@@ -46,6 +46,8 @@ build-windows:
 	@echo "Building for Windows x86_64..."
 	GOOS=windows GOARCH=amd64 go build -o dist/server-windows.exe ./cmd/server
 	GOOS=windows GOARCH=amd64 go build -o dist/agent-windows.exe ./cmd/agent
+	@echo "Building Windows MSI installer..."
+	powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\packaging\windows\build-msi.ps1'" || echo "Warning: MSI build skipped (WiX toolset not installed)"
 
 build-darwin:
 	@echo "Building for macOS (Intel + ARM)..."
@@ -56,6 +58,12 @@ build-darwin:
 
 build-all: build-linux build-windows build-darwin
 	@echo "✓ All platforms built"
+
+build-msi:
+	@echo "Building Windows MSI installer..."
+	powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\packaging\windows\build-msi.ps1'"
+
+.PHONY: build-msi
 
 test:
 	@echo "Running tests..."

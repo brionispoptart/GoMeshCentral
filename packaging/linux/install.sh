@@ -32,6 +32,12 @@ echo "[GoMeshCentral] Installing Linux Agent..."
 mkdir -p "$INSTALL_DIR" "$STATE_DIR"
 chmod 700 "$STATE_DIR"
 
+echo "[GoMeshCentral] Downloading deployment manifest from http://$SERVER/api/download/agent/manifest-installer..."
+if command -v curl >/dev/null 2>&1; then
+  curl -sSL "http://$SERVER/api/download/agent/manifest-installer" -o "$STATE_DIR/manifest.json" 2>/dev/null || echo "[GoMeshCentral] Warning: manifest download failed"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "$STATE_DIR/manifest.json" "http://$SERVER/api/download/agent/manifest-installer" 2>/dev/null || echo "[GoMeshCentral] Warning: manifest download failed"
+fi
 if [ ! -f "$INSTALL_DIR/gomesh-agent" ]; then
   if [ -f "./gomesh-agent" ]; then
     cp "./gomesh-agent" "$INSTALL_DIR/gomesh-agent"

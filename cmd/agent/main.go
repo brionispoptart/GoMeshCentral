@@ -50,6 +50,18 @@ type enrollmentResponse struct {
 	AgentKey string `json:"agentKey"`
 }
 
+type registrationRequest struct {
+	Name          string `json:"name"`
+	MachineIDHash string `json:"machineIdHash"`
+	SystemIDHash  string `json:"systemIdHash"`
+	BoardIDHash   string `json:"boardIdHash"`
+}
+
+type registrationResponse struct {
+	DeviceID string `json:"deviceId"`
+	AgentKey string `json:"agentKey"`
+}
+
 type rotateCredentialRequest struct {
 	DeviceID   string `json:"deviceId"`
 	CurrentKey string `json:"currentAgentKey"`
@@ -109,8 +121,14 @@ func main() {
 		reportSec     = flag.Int("report-seconds", 60, "agent system report interval in seconds")
 		statePath     = flag.String("state", "data/agent-state.json", "path to persisted agent state")
 		trayIcon      = flag.String("tray-icon", "assets/icons/agent/agent.ico", "path to tray icon file (.ico on Windows)")
+		trayUIOnly    = flag.Bool("tray-ui-only", false, "run only the tray UI (Windows); connects to the background service for status")
 	)
 	flag.Parse()
+
+	if *trayUIOnly && runtime.GOOS == "windows" {
+		runTrayUIOnly(*trayIcon)
+		return
+	}
 
 	if *installSvc {
 		if runtime.GOOS == "windows" {
@@ -194,14 +212,71 @@ func main() {
 	runAgentUI(iconBytes, statusText, requestStop, stop, newUnattendedControls(*server, *statePath, *enrollToken, *heartbeatSec, *reportSec, *rotateEvery))
 }
 
+// runTrayUIOnly runs only the tray UI without the agent core. Used when launched
+// by the Windows service at user logon. The UI shows status from the running service.
+func runTrayUIOnly(trayIconPath string) {
+	iconBytes, err := os.ReadFile(trayIconPath)
+	if err != nil {
+		log.Printf("tray icon not loaded (%s): %v", trayIconPath, err)
+	}
+
+	statusText := make(chan string, 8)
+	stop := make(chan struct{})
+	var stopOnce sync.Once
+	requestStop := func() {
+		stopOnce.Do(func() { close(stop) })
+	}
+
+	// Send an initial status message
+	statusText <- "Service running"
+
+	// Simple UI-only mode - just show the tray icon with a status message
+	// The unattended controls will still work to toggle the service
+	runAgentUI(iconBytes, statusText, requestStop, stop, unattendedControls{
+		supported: true,
+		installed: func() bool {
+			// Check if the service is installed
+			return isWindowsServiceInstalled()
+		},
+		toggle: func(enable bool) error {
+			// This will handle toggling the service via the existing mechanism
+			return spawnServiceToggle(enable, "localhost:8080", "", "", 10, 60, 0)
+		},
+	})
+}
+
 // startAgent loads (or initializes) the persisted identity and runs the agent
 // connection loop until stop is closed. It is shared by the interactive runtime
 // and the installed Windows service runtime.
 func startAgent(server, enrollToken, statePath, deviceID, name string, heartbeatSec, reportSec, rotateEvery int, rotateNow bool, stop chan struct{}, status func(string), standDown func() bool) error {
 	agentStartedAt := time.Now().UTC()
+
+	// Load deployment manifest if present
+	manifest, err := loadManifest()
+	if err != nil {
+		log.Printf("warning: failed to load manifest: %v", err)
+	}
+
+	// Merge manifest with command-line flags: command-line takes precedence
+	if server == "" && manifest.ServerEndpoint != "" {
+		server = manifest.ServerEndpoint
+		log.Printf("using server endpoint from manifest: %s", server)
+	}
+	if enrollToken == "" && manifest.BootstrapToken != "" {
+		enrollToken = manifest.BootstrapToken
+		log.Printf("using bootstrap token from manifest")
+	}
+	if server == "" {
+		server = "localhost:8080"
+	}
+
 	state, err := loadOrInitializeState(statePath, deviceID, name)
 	if err != nil {
 		return err
+	}
+	identity := collectHardwareIdentity()
+	if state.AgentKey == "" && identity.count() < 2 {
+		return errors.New("unable to collect two stable hardware identifiers; enroll with an enrollment token")
 	}
 	log.Printf("agent identity loaded: id=%s name=%s", state.DeviceID, state.Name)
 
@@ -210,10 +285,10 @@ func startAgent(server, enrollToken, statePath, deviceID, name string, heartbeat
 	if reportInterval <= 0 {
 		reportInterval = 60 * time.Second
 	}
-	return runAgentLoop(server, enrollToken, statePath, state, time.Duration(heartbeatSec)*time.Second, reportInterval, rotationInterval, rotateNow, agentStartedAt, stop, status, standDown)
+	return runAgentLoop(server, enrollToken, statePath, state, identity, time.Duration(heartbeatSec)*time.Second, reportInterval, rotationInterval, rotateNow, agentStartedAt, stop, status, standDown)
 }
 
-func runAgentLoop(server, enrollToken, statePath string, state agentState, heartbeat, reportInterval, rotationInterval time.Duration, rotateNow bool, agentStartedAt time.Time, stop <-chan struct{}, status func(string), standDown func() bool) error {
+func runAgentLoop(server, enrollToken, statePath string, state agentState, identity hardwareIdentity, heartbeat, reportInterval, rotationInterval time.Duration, rotateNow bool, agentStartedAt time.Time, stop <-chan struct{}, status func(string), standDown func() bool) error {
 	backoff := 2 * time.Second
 	pendingRotateNow := rotateNow
 	for {
@@ -234,7 +309,21 @@ func runAgentLoop(server, enrollToken, statePath string, state agentState, heart
 		}
 
 		if state.AgentKey == "" {
-			if enrollToken != "" {
+			if identity.count() >= 2 {
+				registeredState, err := registerAgent(server, state, identity)
+				if err != nil {
+					status("Registration Failed")
+					log.Printf("automatic registration failed: %v", err)
+					sleepWithJitter(backoff, stop)
+					backoff = nextBackoff(backoff)
+					continue
+				}
+				state = registeredState
+				if err := saveState(statePath, state); err != nil {
+					log.Printf("save state failed: %v", err)
+				}
+				log.Printf("agent automatically registered with server-issued credential")
+			} else if enrollToken != "" {
 				enrolledState, err := enrollAgent(server, enrollToken, state)
 				if err != nil {
 					status("Enrollment Failed")
@@ -249,8 +338,8 @@ func runAgentLoop(server, enrollToken, statePath string, state agentState, heart
 				}
 				log.Printf("agent enrolled with server-issued credential")
 			} else {
-				status("Needs Enrollment")
-				log.Printf("no agent credential found; provide -enroll-token to enroll")
+				status("Needs Identity")
+				log.Printf("no agent credential and insufficient hardware identity")
 				sleepWithJitter(backoff, stop)
 				backoff = nextBackoff(backoff)
 				continue
@@ -285,8 +374,17 @@ func runAgentLoop(server, enrollToken, statePath string, state agentState, heart
 		q.Set("device_id", state.DeviceID)
 		u.RawQuery = q.Encode()
 
-		conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		conn, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
 		if err != nil {
+			if response != nil && response.StatusCode == http.StatusUnauthorized && identity.count() >= 2 {
+				state.AgentKey = ""
+				if saveErr := saveState(statePath, state); saveErr != nil {
+					log.Printf("clear rejected credential failed: %v", saveErr)
+				}
+				status("Re-registering")
+				log.Printf("server rejected agent credential; re-registering hardware identity")
+				continue
+			}
 			status("Reconnecting")
 			log.Printf("dial failed: %v", err)
 			sleepWithJitter(backoff, stop)
@@ -520,6 +618,30 @@ func saveState(path string, state agentState) error {
 		return err
 	}
 	return os.WriteFile(path, payload, 0o600)
+}
+func registerAgent(server string, state agentState, identity hardwareIdentity) (agentState, error) {
+	payload, err := json.Marshal(registrationRequest{Name: state.Name, MachineIDHash: identity.MachineID, SystemIDHash: identity.SystemID, BoardIDHash: identity.BoardID})
+	if err != nil {
+		return agentState{}, err
+	}
+	resp, err := http.Post("http://"+server+"/api/agents/register", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return agentState{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return agentState{}, fmt.Errorf("registration rejected: %s", strings.TrimSpace(string(body)))
+	}
+	var out registrationResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return agentState{}, err
+	}
+	if out.DeviceID == "" || out.AgentKey == "" {
+		return agentState{}, errors.New("invalid registration response")
+	}
+	state.DeviceID, state.AgentKey = out.DeviceID, out.AgentKey
+	return state, nil
 }
 
 func enrollAgent(server, enrollToken string, state agentState) (agentState, error) {

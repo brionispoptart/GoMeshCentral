@@ -31,25 +31,78 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ExePath)) {
     exit 1
 }
 
-# 3. Check for WiX Toolset
-$MsiPath = "$OutDir\GoMeshCentralAgent.msi"
-$wixCandidate = Get-Command candle, light, wix -ErrorAction SilentlyContinue
+# 3. Copy uninstall.bat to dist
+$UninstallSrc = "$ScriptDir\uninstall.bat"
+$UninstallDst = "$OutDir\uninstall.bat"
+if (Test-Path $UninstallSrc) {
+    Copy-Item $UninstallSrc $UninstallDst -Force
+    Write-Host "[GoMeshCentral] Copied uninstall.bat to $UninstallDst"
+} else {
+    Write-Warning "[GoMeshCentral] uninstall.bat not found at $UninstallSrc"
+}
 
-if ($wixCandidate) {
-    Write-Host "[GoMeshCentral] Building MSI using WiX Toolset..."
+# 4. Check for WiX Toolset
+$MsiPath = "$OutDir\GoMeshCentralAgent.msi"
+$wixFound = $false
+
+# Try modern WiX (v4+) first
+if (Get-Command wix -ErrorAction SilentlyContinue) {
+    Write-Host "[GoMeshCentral] Found WiX v4+ CLI..."
+    $wixFound = $true
+    $WxsPath = "$ScriptDir\GoMeshCentralAgent.wxs"
+    
+    try {
+        wix build "$WxsPath" -o "$MsiPath" -d SourceDir="$OutDir"
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[GoMeshCentral] MSI built successfully: $MsiPath"
+            Write-Host "[GoMeshCentral] File size: $((Get-Item $MsiPath).Length / 1MB)MB"
+        } else {
+            Write-Error "WiX build failed with exit code $LASTEXITCODE"
+            exit 1
+        }
+    } catch {
+        Write-Error "Failed to build MSI: $_"
+        exit 1
+    }
+}
+# Try classic WiX (v3) tools
+elseif ((Get-Command candle -ErrorAction SilentlyContinue) -and (Get-Command light -ErrorAction SilentlyContinue)) {
+    Write-Host "[GoMeshCentral] Found WiX v3 (candle/light)..."
+    $wixFound = $true
     $WxsPath = "$ScriptDir\GoMeshCentralAgent.wxs"
     $WixObjPath = "$OutDir\GoMeshCentralAgent.wixobj"
     
-    if (Get-Command candle -ErrorAction SilentlyContinue) {
-        candle -DSourceDir="$OutDir" -out $WixObjPath $WxsPath
-        light -out $MsiPath $WixObjPath
-    } else {
-        wix build $WxsPath -o $MsiPath -d SourceDir="$OutDir"
+    try {
+        & candle "-dSourceDir=$OutDir" -out "$WixObjPath" "$WxsPath"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Candle compilation failed"
+            exit 1
+        }
+        
+        & light -out "$MsiPath" "$WixObjPath"
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[GoMeshCentral] MSI built successfully: $MsiPath"
+            Write-Host "[GoMeshCentral] File size: $((Get-Item $MsiPath).Length / 1MB)MB"
+        } else {
+            Write-Error "Light linking failed with exit code $LASTEXITCODE"
+            exit 1
+        }
+    } catch {
+        Write-Error "Failed to build MSI: $_"
+        exit 1
     }
-} else {
-    Write-Host "[GoMeshCentral] WiX CLI not found on PATH."
-    Write-Host "[GoMeshCentral] Note: agent.exe includes built-in Windows ARP (Add/Remove Programs) registration when installed via -install-service."
-    Write-Host "[GoMeshCentral] To build formal MSIs, install WiX v3/v4 or run build-msi.ps1 with WiX installed."
+}
+else {
+    Write-Error "WiX Toolset not found. Please install WiX (v3 or v4+) and ensure candle/light/wix are on PATH"
+    Write-Host "Download WiX from: https://wixtoolset.org/"
+    exit 1
 }
 
-Write-Host "[GoMeshCentral] Windows packaging complete. Agent executable: $ExePath"
+if (-not (Test-Path $MsiPath)) {
+    Write-Error "MSI file was not created"
+    exit 1
+}
+
+Write-Host "[GoMeshCentral] Build complete!"
+Write-Host "[GoMeshCentral] MSI created at: $MsiPath"
+exit 0

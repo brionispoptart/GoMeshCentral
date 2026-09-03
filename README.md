@@ -78,7 +78,30 @@ Frontend development (hot reload):
 
 - make web-dev
 
-## Linux VM Agent Install (Headless)
+## Agent Deployment (Production)
+
+For Windows and Linux agent deployment with professional installer support:
+
+- **Admin Guide**: [docs/WINDOWS_INSTALLATION.md](./docs/WINDOWS_INSTALLATION.md) - MSI building, deployment options
+- **User Guide**: [docs/AGENT_DEPLOYMENT.md](./docs/AGENT_DEPLOYMENT.md) - Installation methods for end users
+- **Status**: [docs/DEPLOYMENT_STATUS.md](./docs/DEPLOYMENT_STATUS.md) - Current features and roadmap
+
+### Quick Windows Deployment
+
+1. Log in to dashboard → Admin → Download Agent
+2. Click "Create Agent" (Windows)
+3. Copy the PowerShell command
+4. Run on target machine as Administrator
+5. Device appears in Devices list within 10 seconds
+
+```powershell
+# Example (get real token from dashboard)
+powershell -NoProfile -ExecutionPolicy Bypass -Command `
+  "Invoke-WebRequest -Uri 'http://server/api/download/install.ps1' -OutFile 'install.ps1' -UseBasicParsing; `
+   .\install.ps1 -Server 'server:8080' -EnrollToken 'TOKEN'"
+```
+
+### Linux Deployment
 
 Use this flow to test an agent on a Linux VM without tray dependencies.
 

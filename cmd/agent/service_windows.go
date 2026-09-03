@@ -270,7 +270,65 @@ func installWindowsService(server, enrollToken, sourceStatePath string, heartbea
 	}
 
 	registerWindowsARP(exeDest)
+
+	// Register tray UI to launch at user logon (must run after service starts)
+	if err := registerTrayUILogon(exeDest); err != nil {
+		log.Printf("warning: could not register tray UI for logon: %v", err)
+	}
+
 	return exeDest, nil
+}
+
+// registerTrayUILogon registers the agent tray UI to launch at every user logon.
+// The agent service runs as LocalSystem and cannot display UI, so we launch the
+// agent exe in UI-only mode for each logged-in user via the All Users Startup folder.
+func registerTrayUILogon(exePath string) error {
+	dataDir := windowsDataDir()
+
+	// Create a VBScript in ProgramData that launches the tray UI invisibly at logon.
+	// VBScript is preferred over batch because it can run processes invisibly without a cmd window.
+	logonScriptPath := filepath.Join(dataDir, "run-tray-ui.vbs")
+	iconPath := filepath.Join(filepath.Dir(exePath), windowsAgentIconName)
+	scriptContent := fmt.Sprintf(`' GoMeshCentral Agent Tray UI Launcher
+' Runs at user logon to display the tray icon for the background service
+Set shell = CreateObject("WScript.Shell")
+WScript.Sleep 2000
+shell.Run """%s"" -tray-ui-only -tray-icon ""%s""", 0, False
+`, exePath, iconPath)
+
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return fmt.Errorf("create data directory: %w", err)
+	}
+
+	if err := os.WriteFile(logonScriptPath, []byte(scriptContent), 0o644); err != nil {
+		return fmt.Errorf("write logon script: %w", err)
+	}
+
+	// Also try to create a shortcut in the All Users Startup folder for maximum compatibility
+	// This works on all Windows versions and runs in the user's session
+	vbsPath := filepath.Join(dataDir, "run-tray-ui.vbs")
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", fmt.Sprintf(`
+$shell = New-Object -ComObject WScript.Shell
+$allUsersStartup = Join-Path $env:ALLUSERSPROFILE "Microsoft\Windows\Start Menu\Programs\Startup"
+$link = Join-Path $allUsersStartup "GoMeshCentral Agent Tray.lnk"
+if (Test-Path $link) { Remove-Item $link -Force }
+$shortcut = $shell.CreateShortcut($link)
+$shortcut.TargetPath = "wscript.exe"
+$shortcut.Arguments = """%s"""
+$shortcut.IconLocation = "%s"
+$shortcut.WorkingDirectory = "%s"
+$shortcut.WindowStyle = 7
+$shortcut.Save()
+Write-Output "Startup shortcut created at $link"
+`, vbsPath, exePath, filepath.Dir(exePath)))
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := cmd.Run(); err != nil {
+		// Continue even if shortcut creation fails; it's not critical
+		log.Printf("warning: could not create startup shortcut: %v", err)
+	}
+
+	return nil
 }
 
 func uninstallWindowsService() error {
@@ -294,7 +352,23 @@ func uninstallWindowsService() error {
 	}
 
 	unregisterWindowsARP()
+
+	// Unregister the tray UI scheduled task
+	unregisterTrayUILogon()
+
 	return nil
+}
+
+// unregisterTrayUILogon removes the scheduled task for tray UI logon
+func unregisterTrayUILogon() {
+	const taskName = "GoMeshCentralAgentTrayUI"
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", fmt.Sprintf(`
+try {
+  Unregister-ScheduledTask -TaskName '%s' -Confirm:$false -ErrorAction Stop | Out-Null
+} catch { }
+`, taskName))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	_ = cmd.Run()
 }
 
 func registerWindowsARP(exeDest string) {
@@ -374,6 +448,23 @@ func spawnServiceToggle(enable bool, server, statePath, enrollToken string, hear
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("launch service toggle: %w", err)
+	}
+	return nil
+}
+
+// spawnUninstallAgent spawns an elevated process to uninstall the agent service.
+// This is called from the tray UI uninstall menu item. The process runs elevated
+// via UAC prompt and performs the uninstall operation asynchronously.
+func spawnUninstallAgent() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve executable path: %w", err)
+	}
+
+	cmd := exec.Command(exe, "-uninstall-service")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("launch uninstall: %w", err)
 	}
 	return nil
 }
