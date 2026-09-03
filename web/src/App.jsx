@@ -37,6 +37,7 @@ import {
   Folder,
   Database,
   ChevronDown,
+  Plus,
 } from "lucide-react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -328,6 +329,7 @@ function DevicesPage({ devices, clients, groups, canCommand, canManageUsers, can
   const [clientFilter, setClientFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
   const [sortBy, setSortBy] = useState("name");
+  const [showDownloader, setShowDownloader] = useState(false);
 
   const clientNameById = useMemo(() => {
     const map = new Map();
@@ -374,12 +376,42 @@ function DevicesPage({ devices, clients, groups, canCommand, canManageUsers, can
   }, [devices, clientFilter, groupFilter, sortBy, clientNameById, groupNameById]);
 
   return (
-    <Card className="bg-white border-gray-200 shadow-sm">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-xl font-bold text-gray-900">Connected Devices</CardTitle>
-        <CardDescription className="text-gray-600 mt-1">Endpoint inventory, client assignment, quick command dispatch, and delete lifecycle action.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <>
+      {showDownloader && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-8 pb-8 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-2xl font-bold">Download & Deploy Agent</h2>
+              <button
+                onClick={() => setShowDownloader(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+              <AdminDownloads />
+            </div>
+          </div>
+        </div>
+      )}
+      <Card className="bg-white border-gray-200 shadow-sm">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl font-bold text-gray-900">Connected Devices</CardTitle>
+              <CardDescription className="text-gray-600 mt-1">Endpoint inventory, client assignment, quick command dispatch, and delete lifecycle action.</CardDescription>
+            </div>
+            <Button
+              onClick={() => setShowDownloader(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Download Agent
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-[200px_200px_200px_1fr]">
           <select
             className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -493,6 +525,7 @@ function DevicesPage({ devices, clients, groups, canCommand, canManageUsers, can
         <p className="min-h-5 text-sm text-muted-foreground">{appStatus}</p>
       </CardContent>
     </Card>
+    </>
   );
 }
 

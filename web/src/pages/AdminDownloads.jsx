@@ -106,60 +106,7 @@ export function AdminDownloads() {
     document.body.removeChild(textarea);
   };
 
-  const downloadAgent = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      let filename, url;
-      
-      if (selectedPlatform === "windows") {
-        // Download MSI installer
-        url = apiUrl("/api/download/agent/windows-msi");
-        filename = "GoMeshCentralAgent.msi";
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          throw new Error(`Download failed: ${response.statusText}`);
-        }
-        
-        // Download the file
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(downloadUrl);
-      } else {
-        // Linux - just download directly
-        url = apiUrl("/api/download/agent/linux-amd64");
-        filename = "gomesh-agent";
-        
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Download failed: ${response.statusText}`);
-        }
-        
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(downloadUrl);
-      }
-    } catch (err) {
-      console.error("Download error:", err);
-      setError(err.message || "Failed to download agent binary");
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   if (!selectedPlatform) {
     return (
@@ -295,60 +242,18 @@ export function AdminDownloads() {
       <Card className="border-2 border-gray-200">
         <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 pb-4">
           <CardTitle className="text-2xl">
-            {selectedPlatform === "windows" ? "Installation Options" : "Installation Command"}
+            Installation Command
           </CardTitle>
           <CardDescription className="text-base">
             {selectedPlatform === "windows" 
-              ? "Choose your preferred installation method" 
-              : "This command downloads and installs the agent with automatic enrollment"}
+              ? "Copy and run this command in PowerShell to install and automatically enroll the agent" 
+              : "Copy and run this command in Terminal to install and automatically enroll the agent"}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-8 space-y-6">
-          {selectedPlatform === "windows" && (
-            <div className="space-y-3">
-              <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Option 1: MSI Installer (Recommended)
-              </p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Download the MSI installer for professional deployment. It handles installation, service setup, and automatic enrollment all in one package.
-              </p>
-              <div className="flex gap-3">
-                <Button
-                  size="lg"
-                  onClick={downloadAgent}
-                  disabled={loading}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-6 text-base font-semibold"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5 mr-2" />
-                      Download GoMeshCentralAgent.msi
-                    </>
-                  )}
-                </Button>
-                <input
-                  type="hidden"
-                  id="enrollToken"
-                  value={token}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-3 p-3 bg-blue-50 rounded border border-blue-200">
-                <strong>Enrollment Token:</strong> {token}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                After downloading, double-click <code className="bg-gray-100 px-2 py-1 rounded">GoMeshCentralAgent.msi</code> to install and automatically enroll the agent.
-              </p>
-            </div>
-          )}
-
-          <div className={selectedPlatform === "windows" ? "pt-6 border-t" : ""}>
+          <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-              {selectedPlatform === "windows" ? "Option 2: PowerShell Command" : "Terminal / Bash"}
+              {selectedPlatform === "windows" ? "Installation Command" : "Terminal / Bash"}
             </p>
             <div className="space-y-3">
               <div className="flex gap-2 items-start">
@@ -415,16 +320,12 @@ export function AdminDownloads() {
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
           <p className="text-gray-700">
-            After {selectedPlatform === "windows" 
-              ? "running either installation method" 
-              : "running this command"} on your {selectedPlatform === "windows" ? "Windows" : "Linux"} system:
+            After running this command on your {selectedPlatform === "windows" ? "Windows" : "Linux"} system:
           </p>
           <ol className="space-y-3 ml-2">
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">1</span>
-              <span>{selectedPlatform === "windows" 
-                ? "The agent binary starts and connects to the server" 
-                : "The installer script downloads the agent binary"}</span>
+              <span>The installer script downloads the agent binary</span>
             </li>
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">2</span>
@@ -432,7 +333,7 @@ export function AdminDownloads() {
             </li>
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">3</span>
-              <span>The agent connects to GoMeshCentral and begins system monitoring</span>
+              <span>The agent starts and connects to GoMeshCentral</span>
             </li>
             <li className="flex gap-3">
               <span className="font-bold text-blue-600 flex-shrink-0">4</span>

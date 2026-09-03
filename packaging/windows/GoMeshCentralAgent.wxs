@@ -46,7 +46,7 @@
       </Component>
 
       <!-- Add/Remove Programs registry entries -->
-      <Component Id="RegistryComponent" Directory="TARGETDIR" Guid="9A8B7C6D-5E4F-3A2B-1C0D-9E8F7A6B5C4D">
+      <Component Id="RegistryComponent" Directory="INSTALLFOLDER" Guid="9A8B7C6D-5E4F-3A2B-1C0D-9E8F7A6B5C4D">
         <RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\GoMeshCentralAgent">
           <RegistryValue Type="string" Name="DisplayName" Value="GoMeshCentral Agent" />
           <RegistryValue Type="string" Name="DisplayVersion" Value="1.0.1.0" />

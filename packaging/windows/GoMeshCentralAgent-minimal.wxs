@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="GoMeshCentral Agent" Language="1033" Version="1.0.2.0" Manufacturer="GoMeshCentral" UpgradeCode="7F4F725E-C246-4F18-9124-7B03010FA22C">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" 
+             Description="GoMeshCentral Remote Management Agent" 
+             Manufacturer="GoMeshCentral"/>
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of GoMeshCentral Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="GoMeshCentral">
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramDataFolder">
+        <Directory Id="PROGRAMDATAMGC" Name="GoMeshCentral">
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="MainFeature" Title="GoMeshCentral Agent" Level="1" Description="Remote management agent">
+      <!-- Agent binary ONLY - no extras -->
+      <Component Id="AgentBinary" Directory="INSTALLFOLDER" Guid="3E4D6C2A-9D8E-4A1B-8C2F-5D9E7F1A3B5C">
+        <File Id="AgentExe" Source="$(var.SourceDir)\agent.exe" KeyPath="yes" Checksum="yes" />
+      </Component>
+
+      <!-- App data directory only -->
+      <Component Id="AppDataDir" Directory="PROGRAMDATAMGC" Guid="8E7A2B5C-9F1D-4A3E-B7C9-1A2D3E4F5A6B">
+        <CreateFolder />
+      </Component>
+    </Feature>
+
+  </Product>
+</Wix>

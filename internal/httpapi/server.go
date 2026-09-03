@@ -285,7 +285,6 @@ func NewServer(cfg config.Config, store storage.Store) *Server {
 	mux.HandleFunc("/api/download/install.ps1", s.handleDownloadInstallPs1)
 	mux.HandleFunc("/api/download/install-verbose.ps1", s.handleDownloadInstallVerbosePs1)
 	mux.HandleFunc("/api/download/agent/windows-amd64", s.handleDownloadAgentWindows)
-	mux.HandleFunc("/api/download/agent/windows-msi", s.handleDownloadAgentWindowsMSI)
 	mux.HandleFunc("/api/download/agent/linux-amd64", s.handleDownloadAgentLinux)
 	mux.HandleFunc("/api/download/agent/manifest", s.authMiddleware(s.permissionMiddleware(authz.PermManageUsers, s.handleAgentManifest)))
 	mux.HandleFunc("/api/download/agent/manifest-installer", s.authMiddleware(s.handleDownloadAgentManifestForInstaller))
@@ -974,18 +973,6 @@ func (s *Server) handleDownloadAgentWindows(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	http.Error(w, "Windows agent binary unavailable on server.", http.StatusNotFound)
-}
-
-func (s *Server) handleDownloadAgentWindowsMSI(w http.ResponseWriter, r *http.Request) {
-	// Serve MSI from dist directory (built by make build-windows or build-msi)
-	path := "dist/GoMeshCentralAgent.msi"
-	if _, err := os.Stat(path); err != nil {
-		http.Error(w, "Windows MSI installer not found. Ensure MSI was built via 'make build-windows' or 'make build-msi'.", http.StatusNotFound)
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="GoMeshCentralAgent.msi"`)
-	http.ServeFile(w, r, path)
 }
 
 func (s *Server) handleDownloadAgentLinux(w http.ResponseWriter, r *http.Request) {
