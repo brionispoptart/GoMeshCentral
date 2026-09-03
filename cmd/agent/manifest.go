@@ -21,18 +21,33 @@ type deploymentManifest struct {
 	LogoDataURL    string `json:"logoDataUrl,omitempty"`
 }
 
+// getManifestPath returns the path to the deployment manifest file
+// based on the current platform.
+func getManifestPath() string {
+	switch runtime.GOOS {
+	case "windows":
+		// On Windows, use ProgramData\GoMeshCentral\manifest.json
+		// We can't call windowsDataDir() here since it's Windows-only,
+		// so we compute it directly
+		programData := os.Getenv("ProgramData")
+		if programData == "" {
+			programData = `C:\ProgramData`
+		}
+		return filepath.Join(programData, "GoMeshCentral", "manifest.json")
+	case "linux":
+		return filepath.Join(linuxDataDir, "manifest.json")
+	default:
+		return "" // no manifest on unsupported platforms
+	}
+}
+
 // loadManifest reads a deployment manifest from a well-known path.
 // On Windows: C:\ProgramData\GoMeshCentral\manifest.json
 // On Linux: /var/lib/gomeshcentral/manifest.json
 // Returns empty manifest if file does not exist (no error).
 func loadManifest() (deploymentManifest, error) {
-	var manifestPath string
-	switch runtime.GOOS {
-	case "windows":
-		manifestPath = filepath.Join(windowsDataDir(), "manifest.json")
-	case "linux":
-		manifestPath = linuxDataDir + "/manifest.json"
-	default:
+	manifestPath := getManifestPath()
+	if manifestPath == "" {
 		return deploymentManifest{}, nil // no manifest on unsupported platforms
 	}
 
