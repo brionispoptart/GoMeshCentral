@@ -7,10 +7,6 @@ import (
 	"runtime"
 )
 
-const (
-	linuxDataDir = "/var/lib/gomeshcentral"
-)
-
 // deploymentManifest contains server-provided configuration that is portable
 // across installations and generated per-deployment by the server.
 type deploymentManifest struct {
@@ -35,7 +31,7 @@ func getManifestPath() string {
 		}
 		return filepath.Join(programData, "GoMeshCentral", "manifest.json")
 	case "linux":
-		return filepath.Join(linuxDataDir, "manifest.json")
+		return "/var/lib/gomeshcentral/manifest.json"
 	default:
 		return "" // no manifest on unsupported platforms
 	}

@@ -140,3 +140,9 @@ func newUnattendedControls(string, string, string, int, int, int) unattendedCont
 }
 
 func agentServiceActive() bool { return isLinuxServiceInstalled() }
+
+func isWindowsServiceInstalled() bool { return false }
+
+func spawnServiceToggle(bool, string, string, string, int, int, int) error {
+	return errServiceUnsupported
+}
