@@ -283,6 +283,7 @@ func NewServer(cfg config.Config, store storage.Store) *Server {
 	mux.HandleFunc("/api/enrollment-tokens", s.authMiddleware(s.permissionMiddleware(authz.PermManageUsers, s.handleCreateEnrollmentToken)))
 	mux.HandleFunc("/api/download/install.sh", s.handleDownloadInstallSh)
 	mux.HandleFunc("/api/download/install.ps1", s.handleDownloadInstallPs1)
+	mux.HandleFunc("/api/download/install-verbose.ps1", s.handleDownloadInstallVerbosePs1)
 	mux.HandleFunc("/api/download/agent/windows-amd64", s.handleDownloadAgentWindows)
 	mux.HandleFunc("/api/download/agent/windows-msi", s.handleDownloadAgentWindowsMSI)
 	mux.HandleFunc("/api/download/agent/linux-amd64", s.handleDownloadAgentLinux)
@@ -946,6 +947,19 @@ func (s *Server) handleDownloadInstallPs1(w http.ResponseWriter, r *http.Request
 	content := strings.ReplaceAll(string(script), `[string]$Server = ""`, fmt.Sprintf(`[string]$Server = "%s"`, agentServer))
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="install.ps1"`)
+	_, _ = w.Write([]byte(content))
+}
+
+func (s *Server) handleDownloadInstallVerbosePs1(w http.ResponseWriter, r *http.Request) {
+	agentServer := s.resolveAgentServer(r)
+	script, err := os.ReadFile("packaging/windows/install-verbose.ps1")
+	if err != nil {
+		http.Error(w, "verbose installer script unavailable", http.StatusNotFound)
+		return
+	}
+	content := strings.ReplaceAll(string(script), `[string]$Server = ""`, fmt.Sprintf(`[string]$Server = "%s"`, agentServer))
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="install-verbose.ps1"`)
 	_, _ = w.Write([]byte(content))
 }
 
