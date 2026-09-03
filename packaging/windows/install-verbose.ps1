@@ -67,7 +67,8 @@ Log-Event "Running as Administrator: YES"
 Log-Event "Collecting system information..."
 Log-Event "OS: $([System.Environment]::OSVersion.VersionString)"
 Log-Event "PowerShell Version: $($PSVersionTable.PSVersion)"
-Log-Event "Architecture: $([System.Environment]::Is64BitOperatingSystem ? '64-bit' : '32-bit')"
+$arch = if ([System.Environment]::Is64BitOperatingSystem) { '64-bit' } else { '32-bit' }
+Log-Event "Architecture: $arch"
 
 # Directory setup
 $TempDir = $env:TEMP
