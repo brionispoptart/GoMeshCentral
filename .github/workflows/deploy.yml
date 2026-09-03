@@ -9,7 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Check deploy secret is configured
+      id: check_secret
+      run: |
+        if [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ]; then
+          echo "DEPLOY_SSH_KEY secret is not set. Skipping deployment."
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Deploy to Linux Server
+      if: steps.check_secret.outputs.configured == 'true'
       uses: appleboy/ssh-action@master
       with:
         host: 10.10.0.242
